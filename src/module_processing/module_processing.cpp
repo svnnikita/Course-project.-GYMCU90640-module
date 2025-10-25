@@ -1,183 +1,87 @@
 #include <libopencm3/stm32/rcc.h> 
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/usart.h>
+#include <libopencm3/cm3/nvic.h>
 
 #include "module_processing/module_processing.hpp"
 
 #define BAUD_SPEED 115200
 #define WORD_SIZE 8
 
-// тактирование
+// Тактирование
 void Clock_Setup(void) {
-	rcc_periph_clock_enable(RCC_GPIOA);
-	rcc_periph_clock_enable(RCC_USART1);
+    rcc_clock_setup_pll(&rcc_hsi_configs[RCC_CLOCK_HSI_64MHZ]);
+    rcc_periph_clock_enable(RCC_GPIOA);
+    rcc_periph_clock_enable(RCC_USART1);
     rcc_periph_clock_enable(RCC_USART2);
 }
 
-// настройка UART для обмена данными с датчиком
-void UART_GYMCU90640_Setup(void) {
-	// настраиваем выводы
-    gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO9|GPIO10);
-    gpio_set_af(GPIOA, GPIO_AF7, GPIO9|GPIO10);
+// Настройка UART2 для приема данных с датчика и передачи их в терминал
+void UART2_GYMCU90640_Setup(void) {
+    // Настраиваем выводы
+    gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO2|GPIO3);
+    gpio_set_af(GPIOA, GPIO_AF7, GPIO2|GPIO3);
 
-    // настраиваем UART
-	usart_set_baudrate(USART1, BAUD_SPEED);					// скорость передачи данных
-	usart_set_databits(USART1, WORD_SIZE);					// размер слова
-	usart_set_stopbits(USART1, USART_STOPBITS_1);			// количество стоповых битов
-	usart_set_mode(USART1, USART_MODE_TX_RX);				// режим передачи данных
-	usart_set_parity(USART1, USART_PARITY_NONE);			    // без бита контроля
-	usart_set_flow_control(USART1, USART_FLOWCONTROL_NONE);	// без управления потоком
+    // Настраиваем UART
+    usart_set_baudrate(USART2, BAUD_SPEED);
+    usart_set_databits(USART2, WORD_SIZE);
+    usart_set_stopbits(USART2, USART_STOPBITS_1);
+    usart_set_mode(USART2, USART_MODE_TX_RX);
+    usart_set_parity(USART2, USART_PARITY_NONE);
+    usart_set_flow_control(USART2, USART_FLOWCONTROL_NONE);
 
-    // включаем UART
-	usart_enable(USART1);
+    // Включаем прерывания для USART2 
+    usart_enable_rx_interrupt(USART2);
+    nvic_enable_irq(NVIC_USART2_EXTI26_IRQ);
+
+    // Включаем UART
+    usart_enable(USART2);
 }
 
-// настраиваем UART, по которому будем видеть обработанные данные с датчика
-void UART_Data_Setup(void)
-{
-	// настраиваем выводы
-    gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO14);
-    gpio_set_af(GPIOA, GPIO_AF7, GPIO14);
+// Настраиваем UART1, по которому будем отправлять команды датчику
+void UART1_Data_Setup(void) {
+    // Настраиваем выводы
+    gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO9);
+    gpio_set_af(GPIOA, GPIO_AF7, GPIO9);
 
-    // настраиваем UART
-	usart_set_baudrate(USART2, BAUD_SPEED);					// скорость передачи данных
-	usart_set_databits(USART2, WORD_SIZE);					// размер слова
-	usart_set_stopbits(USART2, USART_STOPBITS_1);			// количество стоповых битов
-	usart_set_mode(USART2, USART_MODE_TX);				// режим передачи данных
-	usart_set_parity(USART2, USART_PARITY_NONE);			    // без бита контроля
-	usart_set_flow_control(USART2, USART_FLOWCONTROL_NONE);	// без управления потоком
+    // Настраиваем UART
+    usart_set_baudrate(USART1, BAUD_SPEED);
+    usart_set_databits(USART1, WORD_SIZE);
+    usart_set_stopbits(USART1, USART_STOPBITS_1);
+    usart_set_mode(USART1, USART_MODE_TX);
+    usart_set_parity(USART1, USART_PARITY_NONE);
+    usart_set_flow_control(USART1, USART_FLOWCONTROL_NONE);
 
-    // включаем UART
-	usart_enable(USART2);
+    // Включаем UART1
+    usart_enable(USART1);
 }
 
-// // Отправляем строку символов через интерфейс USART в блокирующем режиме
-// void UART_Send_String(uint32_t usart, char* str) {
-//     while (*str != '\0') {  						    // пока не достигнут конец строки
-//         usart_send_blocking(usart, (uint8_t)(*str)); 	// передаем текущий символ
-//         str++; 											// переходим к следующему символу
-//     }
-// }
-
-// // функция для отправки команд
-// void USART_Send_Command(uint8_t *data) {
-//     while (*data != '\0') {  			    // пока не достигнут конец строки
-//         usart_send_blocking(USART1, *data); // передаем текущий символ
-//         data++; 							// переходим к следующему символу
-//     }
-// }
-
-// для приёма данных с датчика используем прерывания.
-// отслеживаем новые данные в буфере UART, и если они есть,
-// то поднимается флаг USART_FLAG_RXNE и срабатывает прерывание
-void UART_Processing(infrared_sensor_data* sensor) {
-    if (usart_get_flag(USART1, USART_FLAG_RXNE)) {
-
-        sensor->frame_ready = false;        // кадр обновляется
-        uint8_t data = usart_recv(USART1);
-        
-        // ПОИСК НАЧАЛА КАДРА (0x5A 0x5A)
-        // если первый принятый байт равен 0x5A, то записываем этот байт и двигаемся
-        // дальше по индексам буффера
-        if (sensor->buffer_index == 0 && data == 0x5A) {
-            sensor->frame_buffer[sensor->buffer_index] = data;
-            sensor->buffer_index++;
-        }
-        // если второй байт равен 0x5A, то тоже его записываем
-        else if (sensor->buffer_index == 1 && data == 0x5A) {
-            sensor->frame_buffer[sensor->buffer_index] = data;
-            sensor->buffer_index++;
-        } 
-
-        // ПОИСК БАЙТОВ КОЛИЧЕСТВА ПОЛЕЗНЫХ ДАННЫХ
-        else if (sensor->buffer_index == 2 && data == 0x02) {
-            sensor->frame_buffer[sensor->buffer_index] = data;
-            sensor->buffer_index++;
-        }
-        else if (sensor->buffer_index == 3 && data == 0x06) {
-            sensor->frame_buffer[sensor->buffer_index] = data;
-            sensor->buffer_index++;
-        }
-
-        // ПОИСК БАЙТОВ ТЕМПЕРАТУРЫ
-        else if (sensor->buffer_index >= 4 && sensor->buffer_index < DATA_SIZE - 4) {
-            sensor->frame_buffer[sensor->buffer_index] = data;
-            sensor->buffer_index++;
-        }
-
-        // ПОИСК БАЙТОВ СОБСТВЕННОЙ ТЕМПЕРАТУРЫ ДАТЧИКА
-        else if (sensor->buffer_index == DATA_SIZE - 4) {
-            sensor->frame_buffer[sensor->buffer_index] = data;
-            sensor->buffer_index++;
-        }
-        else if (sensor->buffer_index == DATA_SIZE - 3) {
-            sensor->frame_buffer[sensor->buffer_index] = data;
-            sensor->buffer_index++;
-        }    
-
-        // ПОИСК БАЙТОВ СОВОКУПНОЙ СУММЫ ПЕРВЫХ 771 СЛОВ (16 БИТ)
-        else if (sensor->buffer_index == DATA_SIZE - 2) {
-            sensor->frame_buffer[sensor->buffer_index] = data;
-            sensor->buffer_index++;
-        }
-        else if (sensor->buffer_index == DATA_SIZE - 1) {
-            sensor->frame_buffer[sensor->buffer_index] = data;
-            
-            sensor->frame_ready = true; // кадр готов
-            sensor->buffer_index = 0;   // обнуляем индекс буффера
-        }
-        else {
-            // Сброс при ошибке синхронизации
-            sensor->buffer_index = 0;
-        }
+// Отправляем команды датчику
+void UART_Send_Command(uint8_t *command) {
+    for (int i = 0; i < 4; i++) {
+        usart_send_blocking(USART1, command[i]);
     }
 }
 
-// обработка  кадра
-void Frame_Processing(infrared_sensor_data* sensor, ready_made_data* ready_data) {
-
-    if (sensor->frame_ready == true) {   // если кадр готов
-
-        // обрабатываем начало кадра
-        if (sensor->frame_buffer[0] == 0x5A && sensor->frame_buffer[1] == 0x5A) {
-            // ДЛЯ ОТПРАВКИ СООБЩЕНИЙ ПО USART2 МОЖНО ИСПОЛЬЗОВАТЬ DMA
-            // здесь должна быть функция вывода сообщения в терминал
-        }
-
-        // обрабатываем и вычисляем количество полезной информации
-        else if (sensor->frame_buffer[2] == 0x02 && sensor->frame_buffer[3] == 0x06) {
-            ready_data->data_volume = sensor->frame_buffer[3]*256 + sensor->frame_buffer[2];
-            // вывод значения в терминал
-        }
-
-        // обрабатываем и вычисляем температуру
-        else if (sensor->frame_buffer[4] != 0) {
-            for (uint8_t row = 0; row < ROWS; row++) {                         
-                for (uint8_t col = 0; col < COLS; col++) {
-                    uint16_t i = 4;
-                    // идем по столбцам справа налево,
-                    // а по строкам сверху вниз
-                    ready_data->temperature[ROWS - row - 1][col] =              
-                                        ((sensor->frame_buffer[i + 1] * 256) + 
-                                          sensor->frame_buffer[i]) * 0.01;
-                    i +=2;
+// Обрабатываем данные с датчика
+static uint16_t index1 = 0; 
+void UART2_Processing(sensor_data *sensor) {
+    // Принимаем данные по одному байту за вызов
+    if (usart_get_flag(USART2, USART_FLAG_RXNE)) {
+        sensor->frame_buffer[index1] = usart_recv(USART2);
+        index1++;
+        
+        if (index1 >= DATA_SIZE) {
+            // Отправляем данные через USART2
+            for (uint16_t i = 0; i < DATA_SIZE; i++) {
+                // Ждем, пока буфер передачи не освободится
+                while (!usart_get_flag(USART2, USART_FLAG_TXE)) {
                 }
-            }          
-            // вывод значения в терминал
-        }
-
-        // обрабатываем собственную температуру датчика
-        else if (sensor->frame_buffer[DATA_SIZE - 4] != 0 && sensor->frame_buffer[DATA_SIZE - 3] != 0) {
-            ready_data->ambient_temperature = ((sensor->frame_buffer[DATA_SIZE - 3] * 256) + 
-                                          sensor->frame_buffer[DATA_SIZE - 4]) * 0.01;
-        }
-
-        // вычисляем сумму всего кадра
-        else if (sensor->frame_buffer[DATA_SIZE - 2] != 0 && sensor->frame_buffer[DATA_SIZE - 1] != 0) {
-            ready_data->cumulative_sum = (sensor->frame_buffer[DATA_SIZE - 1] * 256) + 
-                                          sensor->frame_buffer[DATA_SIZE - 2];
-            // вывод значения в терминал
-            sensor->frame_ready == false;
+                usart_send(USART2, sensor->frame_buffer[i]);
+            }
+            sensor->frame_ready = true;
+            // Сбрасываем индекс для следующего фрейма
+            index1 = 0;
         }
     }
 }

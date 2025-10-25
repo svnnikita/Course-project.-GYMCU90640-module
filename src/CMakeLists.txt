@@ -3,6 +3,7 @@ message(STATUS "\tSources")
 
 add_executable(${CMAKE_PROJECT_NAME}
     main.cpp
+    module_processing/module_processing.cpp
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME}
