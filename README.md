@@ -1,3 +1,5 @@
+![Image](https://github.com/svnnikita/Course-project.-GYMCU90640-module/raw/main/img/img.jpg)
+
 ## Курсовой проект по телеметрии студента гр. 233 Савина Никиты (2025 год). Программа для STM32F3Discovery
 
 При выполнении курсового проекта использован тепловизионный модуль **GYMCU90640** и плата развития **STM32F3Discovery**. Необходимая документация на оборудование находится в каталоге [refs](https://github.com/svnnikita/thermal_imager/tree/main/refs). Дополнительную информацию по модулю можно найти в [этой статье](https://habr.com/ru/articles/435946/).
