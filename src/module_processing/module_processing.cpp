@@ -66,13 +66,13 @@ void UART_Send_Command(uint8_t *command) {
 // Обрабатываем данные с датчика
 static uint16_t index1 = 0; 
 void UART2_Processing(sensor_data *sensor) {
-    // Принимаем данные по одному байту за вызов
+    
     if (usart_get_flag(USART2, USART_FLAG_RXNE)) {
         sensor->frame_buffer[index1] = usart_recv(USART2);
         index1++;
         
         if (index1 >= DATA_SIZE) {
-            // Отправляем данные через USART2
+            
             for (uint16_t i = 0; i < DATA_SIZE; i++) {
                 // Ждем, пока буфер передачи не освободится
                 while (!usart_get_flag(USART2, USART_FLAG_TXE)) {

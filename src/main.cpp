@@ -5,7 +5,15 @@
 
 #include "module_processing/module_processing.hpp"
 
-sensor_data sensor = {};
+// СХЕМА ПОДКЛЮЧЕНИЯ:
+// CONNECTION DIAGRAM:
+// USART2_TX (PA2) <--> RXD USB2TTL
+// USART2_RX (PA3) <--> TX MODULE
+// USART1_TX (PA9) <--> RX MODULE
+// ОБЪЕДИНИТЬ ВСЕ ЗЕМЛИ
+// UNITE ALL LANDS
+
+sensor_data sensor = {0};
 
 void usart2_exti26_isr(void) {
     UART2_Processing(&sensor);
@@ -14,16 +22,12 @@ void usart2_exti26_isr(void) {
 int main(void) {
     Clock_Setup();
     UART1_Data_Setup();
-    UART2_GYMCU90640_Setup();
+    UART2_GYMCU90640_Setup();   
     
-    // Настраиваем частоту отправки кадров 2 Гц
-    uint8_t cmd2[] = {0xA5, 0x25, 0x02, 0xCC};
-    UART_Send_Command(cmd2);
-
     for (volatile uint32_t i = 0; i < 100000; i++) {
         __asm__("nop");
     }
-
+    
     while (1) {
     }
 
